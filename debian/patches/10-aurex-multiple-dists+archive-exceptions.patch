@@ -1,0 +1,128 @@
+diff -uNr germinate-2.16.1/germinate/archive.py germinate-2.16.1.patched/germinate/archive.py
+--- germinate-2.16.1/germinate/archive.py	2014-07-21 16:00:29.237929809 +0200
++++ germinate-2.16.1.patched/germinate/archive.py	2014-07-21 10:58:44.828298597 +0200
+@@ -95,7 +95,7 @@
+     """Fetch package lists from a Debian-format archive as apt tag files."""
+ 
+     def __init__(self, dists, components, arch, mirrors, source_mirrors=None,
+-                 installer_packages=True, cleanup=False):
++                 installer_packages=True, cleanup=False, archive_exceptions=[]):
+         """Create a representation of a Debian-format apt archive."""
+         if isinstance(dists, _string_types):
+             dists = [dists]
+@@ -116,9 +116,10 @@
+         else:
+             self._source_mirrors = mirrors
+         self._cleanup = cleanup
++        self._archive_exceptions = archive_exceptions
+ 
+     def _open_tag_files(self, mirrors, dirname, tagfile_type,
+-                        dist, component, ftppath):
++                        dist, component, ftppath, archive_exceptions=[]):
+         def _open_tag_file(mirror, suffix):
+             """Download an apt tag file if needed, then open it."""
+             if not mirror.endswith('/'):
+@@ -194,8 +195,21 @@
+                                errors='replace')
+ 
+         tag_files = []
++        some_mirrors_processed = False
+         for mirror in mirrors:
+             tag_file = None
++            skip_this_repo = False
++            for archive in archive_exceptions:
++                if archive == mirror+","+dist+","+component or archive == mirror+","+dist+","+tagfile_type or archive == mirror+","+dist or archive == mirror:
++                    skip_this_repo = True
++                    break
++
++            if skip_this_repo:
++                print("Archive exception: skipping", mirror+","+dist+","+component)
++                continue
++            else:
++                some_mirrors_processed = True
++
+             for suffix in (".bz2", ".gz", ""):
+                 try:
+                     tag_file = _open_tag_file(mirror, suffix)
+@@ -203,7 +217,7 @@
+                     break
+                 except (IOError, OSError):
+                     pass
+-        if len(tag_files) == 0:
++        if some_mirrors_processed and len(tag_files) == 0:
+             raise IOError("no %s files found" % tagfile_type)
+         return tag_files
+ 
+@@ -226,7 +240,7 @@
+             for component in self._components:
+                 packages = self._open_tag_files(
+                     self._mirrors, dirname, "Packages", dist, component,
+-                    "binary-" + self._arch + "/Packages")
++                    "binary-" + self._arch + "/Packages", self._archive_exceptions))
+                 for tag_file in packages:
+                     try:
+                         for section in apt_pkg.TagFile(tag_file):
+@@ -234,15 +248,21 @@
+                     finally:
+                         tag_file.close()
+ 
+-                sources = self._open_tag_files(
+-                    self._source_mirrors, dirname, "Sources", dist, component,
+-                    "source/Sources")
+-                for tag_file in sources:
+-                    try:
+-                        for section in apt_pkg.TagFile(tag_file):
+-                            yield (IndexType.SOURCES, section)
+-                    finally:
+-                        tag_file.close()
++                try:
++                    sources = self._open_tag_files(
++                        self._source_mirrors, dirname, "Sources", dist, component,
++                        "source/Sources", self._archive_exceptions)
++                except IOError:
++                    # can live without these
++                    _progress("Missing Source Packages file for %s "
++                              "(ignoring)", component)
++		else:
++                    for tag_file in sources:
++                        try:
++                            for section in apt_pkg.TagFile(tag_file):
++                                yield (IndexType.SOURCES, section)
++                        finally:
++                            tag_file.close()
+ 
+                 instpackages = ""
+                 if self._installer_packages:
+@@ -251,7 +271,7 @@
+                             self._mirrors, dirname, "InstallerPackages", dist,
+                             component,
+                             "debian-installer/binary-" + self._arch +
+-                            "/Packages")
++                            "/Packages", self._archive_exceptions)
+                     except IOError:
+                         # can live without these
+                         _progress("Missing installer Packages file for %s "
+diff -uNr germinate-2.16.1/germinate/scripts/germinate_update_metapackage.py germinate-2.16.1.patched/germinate/scripts/germinate_update_metapackage.py
+--- germinate-2.16.1/germinate/scripts/germinate_update_metapackage.py	2014-07-21 16:00:29.229929808 +0200
++++ germinate-2.16.1.patched/germinate/scripts/germinate_update_metapackage.py	2014-07-21 15:56:08.765921140 +0200
+@@ -155,6 +155,11 @@
+         dists = config.get(dist, 'dists').split()
+     else:
+         dists = [dist]
++    try:
++        archive_exceptions = config.get(dist, 'archive_base/exceptions').split()
++    except (NoSectionError, NoOptionError):
++        archive_exceptions = []
++
+     components = config.get(dist, 'components').split()
+ 
+     def seed_packages(germinator_method, structure, seed_name):
+@@ -270,7 +275,7 @@
+         archive = germinate.archive.TagFile(
+             dists, components, architecture,
+             archive_base[architecture], source_mirrors=archive_base_default,
+-            cleanup=True)
++            cleanup=True, archive_exceptions=archive_exceptions)
+         germinator.parse_archive(archive)
+         debootstrap_base = set(debootstrap_packages(architecture))
+ 

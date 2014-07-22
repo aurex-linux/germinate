@@ -1,3 +1,9 @@
+germinate (2.16.1-0aurex1) precise; urgency=low
+
+  * Added aurex-multiple-dists+archive-exceptions.patch
+
+ -- Luis Antonio Garcia Gisbert <luisgg@gmail.com>  Tue, 22 Jul 2014 02:02:11 +0200
+
 germinate (2.16.1) trusty; urgency=medium
 
   * Bump recursion limit to 3000; apparently utopic trips over the existing
