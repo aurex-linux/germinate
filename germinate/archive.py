@@ -240,7 +240,7 @@ class TagFile(Archive):
             for component in self._components:
                 packages = self._open_tag_files(
                     self._mirrors, dirname, "Packages", dist, component,
-                    "binary-" + self._arch + "/Packages", self._archive_exceptions))
+                    "binary-" + self._arch + "/Packages", self._archive_exceptions)
                 for tag_file in packages:
                     try:
                         for section in apt_pkg.TagFile(tag_file):
