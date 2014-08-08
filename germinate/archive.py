@@ -256,7 +256,7 @@ class TagFile(Archive):
                     # can live without these
                     _progress("Missing Source Packages file for %s "
                               "(ignoring)", component)
-		else:
+                else:
                     for tag_file in sources:
                         try:
                             for section in apt_pkg.TagFile(tag_file):
